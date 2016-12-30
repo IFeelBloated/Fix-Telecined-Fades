@@ -19,7 +19,6 @@ struct FixFadesData final {
 	auto &operator=(const FixFadesData &) = delete;
 	~FixFadesData() {
 		vsapi->freeNode(node);
-		node = nullptr;
 	}
 };
 
@@ -133,7 +132,7 @@ auto VS_CC fixfadesCreate(const VSMap *in, VSMap *out, void *userData, VSCore *c
 	auto err = 0;
 	if (!isConstantFormat(d->vi) || d->vi->format->sampleType != stFloat || d->vi->format->bitsPerSample < 32) {
 		vsapi->setError(out, "FixFades: input clip must be single precision fp, with constant dimensions.");
-		d->~FixFadesData();
+		delete d;
 		return;
 	}
 	d->mode = vsapi->propGetInt(in, "mode", 0, &err);
@@ -141,7 +140,7 @@ auto VS_CC fixfadesCreate(const VSMap *in, VSMap *out, void *userData, VSCore *c
 		d->mode = 0;
 	if (d->mode < 0 || d->mode > 2) {
 		vsapi->setError(out, "FixFades: mode must be 0, 1, or 2!");
-		d->~FixFadesData();
+		delete d;
 		return;
 	}
 	vsapi->createFilter(in, out, "FixFades", fixfadesInit, fixfadesGetFrame, fixfadesFree, fmParallel, 0, d, core);

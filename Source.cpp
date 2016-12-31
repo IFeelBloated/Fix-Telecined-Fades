@@ -142,7 +142,7 @@ auto VS_CC fixfadesFree(void *instanceData, VSCore *core, const VSAPI *vsapi) {
 }
 
 auto VS_CC fixfadesCreate(const VSMap *in, VSMap *out, void *userData, VSCore *core, const VSAPI *vsapi) {
-	auto d = new FixFadesData(in, vsapi);
+	auto d = new FixFadesData{ in, vsapi };
 	auto err = 0;
 	if (!isConstantFormat(d->vi) || d->vi->format->sampleType != stFloat || d->vi->format->bitsPerSample < 32) {
 		vsapi->setError(out, "FixFades: input clip must be single precision fp, with constant dimensions.");

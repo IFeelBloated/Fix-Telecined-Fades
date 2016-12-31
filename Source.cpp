@@ -1,6 +1,7 @@
 #include "VapourSynth.h"
 #include "VSHelper.h"
 #include <cmath>
+#include <cstring>
 #include <algorithm>
 #include <malloc.h>
 

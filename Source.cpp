@@ -126,10 +126,8 @@ auto VS_CC fixfadesGetFrame(int n, int activationReason, void **instanceData, vo
 			auto CopyToDestinationFrame = [&]() {
 				std::memcpy(dstp[0], srcp[0], width * height * sizeof(float));
 			};
-			auto CopyLine_AVX = [&](auto y) {
-				std::memcpy(&dstp[y][WidthMod8], &srcp[y][WidthMod8], (width - WidthMod8) * sizeof(float));
-				for (auto x = 0; x < WidthMod8; x += 8)
-					_mm256_store_ps(&dstp[y][x], reinterpret_cast<const __m256 &>(srcp[y][x]));
+			auto CopyLine = [&](auto y) {
+				std::memcpy(dstp[y], srcp[y], width * sizeof(float));
 			};
 			auto ProcessLine_AVX_FMA = [&](auto y, auto FieldSum, auto ReferenceSum, auto &YMMField, auto &YMMReference) {
 				auto &YMM0 = _mm256_setzero_ps();
@@ -196,12 +194,12 @@ auto VS_CC fixfadesGetFrame(int n, int activationReason, void **instanceData, vo
 				if (MinSum == TopFieldSum)
 					for (auto y = 1; y < height; y += 2) {
 						ProcessLine_AVX_FMA(y, BottomFieldSum, MinSum, YMMBottomField, YMMMinSum);
-						CopyLine_AVX(y - 1);
+						CopyLine(y - 1);
 					}
 				else
 					for (auto y = 0; y < height; y += 2) {
 						ProcessLine_AVX_FMA(y, TopFieldSum, MinSum, YMMTopField, YMMMinSum);
-						CopyLine_AVX(y + 1);
+						CopyLine(y + 1);
 					}
 			};
 			auto FixFadesMode2_AVX_FMA = [&]() {
@@ -215,26 +213,18 @@ auto VS_CC fixfadesGetFrame(int n, int activationReason, void **instanceData, vo
 				if (MaxSum == TopFieldSum)
 					for (auto y = 1; y < height; y += 2) {
 						ProcessLine_AVX_FMA(y, BottomFieldSum, MaxSum, YMMBottomField, YMMMaxSum);
-						CopyLine_AVX(y - 1);
+						CopyLine(y - 1);
 					}
 				else
 					for (auto y = 0; y < height; y += 2) {
 						ProcessLine_AVX_FMA(y, TopFieldSum, MaxSum, YMMTopField, YMMMaxSum);
-						CopyLine_AVX(y + 1);
+						CopyLine(y + 1);
 					}
-			};
-			auto CopyToDestinationFrame_AVX = [&]() {
-				auto FramePixelCount = static_cast<int64_t>(width) * height;
-				auto FramePixelCountMod8 = FramePixelCount & BitMask;
-				std::memcpy(&dstp[0][FramePixelCountMod8], &srcp[0][FramePixelCountMod8], (FramePixelCount - FramePixelCountMod8) * sizeof(float));
-				for (auto x = 0; x < FramePixelCountMod8; x += 8)
-					_mm256_store_ps(&dstp[0][x], reinterpret_cast<const __m256 &>(srcp[0][x]));
-
 			};
 			Initialize();
 			FixFadesPrepare_AVX();
 			if (GetNormalizedDifference() < d->threshold)
-				CopyToDestinationFrame_AVX();
+				CopyToDestinationFrame();
 			else
 				switch (d->mode) {
 				case 0:

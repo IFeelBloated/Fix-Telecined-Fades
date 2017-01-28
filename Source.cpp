@@ -1,5 +1,6 @@
 #include "VapourSynth.h"
 #include "VSHelper.h"
+#include "cpufeatures.hpp"
 #include <cmath>
 #include <cstring>
 #include <algorithm>
@@ -13,6 +14,7 @@ struct FixFadesData final {
 	int64_t mode = 0;
 	double threshold = 0.;
 	double color[3] = { 0., 0., 0. };
+	bool optimization = false;
 	FixFadesData(const VSMap *in, const VSAPI *api) {
 		vsapi = api;
 		node = vsapi->propGetNode(in, "clip", 0, nullptr);
@@ -192,24 +194,40 @@ auto VS_CC fixfadesGetFrame(int n, int activationReason, void **instanceData, vo
 						CopyLine(y + 1);
 					}
 			};
+			auto DoIt = [&]() {
+				auto CPU = CPUFeatures();
+				if (d->optimization && CPU.avx)
+					FixFadesPrepare_AVX();
+				else
+					FixFadesPrepare();
+				if (GetNormalizedDifference() < d->threshold)
+					CopyToDestinationFrame();
+				else
+					switch (d->mode) {
+					case 0:
+						if (d->optimization && CPU.avx && CPU.fma3)
+							FixFadesMode0_AVX_FMA();
+						else
+							FixFadesMode0();
+						break;
+					case 1:
+						if (d->optimization && CPU.avx && CPU.fma3)
+							FixFadesMode1_AVX_FMA();
+						else
+							FixFadesMode1();
+						break;
+					case 2:
+						if (d->optimization && CPU.avx && CPU.fma3)
+							FixFadesMode2_AVX_FMA();
+						else
+							FixFadesMode2();
+						break;
+					default:
+						break;
+					}
+			};
 			Initialize();
-			FixFadesPrepare_AVX();
-			if (GetNormalizedDifference() < d->threshold)
-				CopyToDestinationFrame();
-			else
-				switch (d->mode) {
-				case 0:
-					FixFadesMode0_AVX_FMA();
-					break;
-				case 1:
-					FixFadesMode1_AVX_FMA();
-					break;
-				case 2:
-					FixFadesMode2_AVX_FMA();
-					break;
-				default:
-					break;
-				}
+			DoIt();
 		}
 		vsapi->freeFrame(src);
 		return dst;
@@ -225,6 +243,7 @@ auto VS_CC fixfadesFree(void *instanceData, VSCore *core, const VSAPI *vsapi) {
 auto VS_CC fixfadesCreate(const VSMap *in, VSMap *out, void *userData, VSCore *core, const VSAPI *vsapi) {
 	auto d = new FixFadesData{ in, vsapi };
 	auto err = 0;
+	auto InputColorChannelCount = vsapi->propNumElements(in, "color");
 	if (!isConstantFormat(d->vi) || d->vi->format->sampleType != stFloat || d->vi->format->bitsPerSample < 32) {
 		vsapi->setError(out, "FixFades: input clip must be single precision fp, with constant dimensions.");
 		delete d;
@@ -246,7 +265,6 @@ auto VS_CC fixfadesCreate(const VSMap *in, VSMap *out, void *userData, VSCore *c
 		delete d;
 		return;
 	}
-	auto InputColorChannelCount = vsapi->propNumElements(in, "color");
 	if (InputColorChannelCount != -1) {
 		if (d->vi->format->numPlanes != InputColorChannelCount) {
 			vsapi->setError(out, "FixFades: Invalid color value for the input colorspace!");
@@ -256,10 +274,19 @@ auto VS_CC fixfadesCreate(const VSMap *in, VSMap *out, void *userData, VSCore *c
 		for (auto i = 0; i < d->vi->format->numPlanes; ++i)
 			d->color[i] = vsapi->propGetFloat(in, "color", i, nullptr);
 	}
+	d->optimization = !!vsapi->propGetInt(in, "opt", 0, &err);
+	if (err)
+		d->optimization = true;
 	vsapi->createFilter(in, out, "FixFades", fixfadesInit, fixfadesGetFrame, fixfadesFree, fmParallel, 0, d, core);
 }
 
 VS_EXTERNAL_API(auto) VapourSynthPluginInit(VSConfigPlugin configFunc, VSRegisterFunction registerFunc, VSPlugin *plugin) {
 	configFunc("com.deinterlace.ftf", "ftf", "Fix Telecined Fades", VAPOURSYNTH_API_VERSION, 1, plugin);
-	registerFunc("FixFades", "clip:clip;mode:int:opt;threshold:float:opt;color:float[]:opt;", fixfadesCreate, nullptr, plugin);
+	registerFunc("FixFades",
+		"clip:clip;"
+		"mode:int:opt;"
+		"threshold:float:opt;"
+		"color:float[]:opt;"
+		"opt:int:opt;"
+		, fixfadesCreate, nullptr, plugin);
 }

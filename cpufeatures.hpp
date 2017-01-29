@@ -37,7 +37,7 @@ struct CPUFeatures final {
 		movbe = !!(ecx & (1 << 22));
 		popcnt = !!(ecx & (1 << 23));
 		if ((ecx & (1 << 27)) && (ecx & (1 << 28))) {
-			eax = static_cast<int32_t>(_xgetbv(0) & 0x00000000FFFFFFFFull);
+			eax = static_cast<decltype(eax + 0)>(_xgetbv(0) & 0x00000000FFFFFFFFull);
 			avx = ((eax & 0x6) == 0x6);
 			if (avx) {
 				__cpuid(Registers, 7);

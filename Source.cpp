@@ -120,8 +120,8 @@ auto VS_CC fixfadesGetFrame(int n, int activationReason, void **instanceData, vo
 				std::memcpy(dstp[y], srcp[y], width * sizeof(float));
 			};
 			auto ProcessLine_AVX_FMA = [&](auto y, auto FieldSum, auto ReferenceSum, auto &YMMFieldReference) {
-				auto &YMM0 = _mm256_setzero_ps();
-				auto &YMMCurrentBaseColor = _mm256_set1_ps(static_cast<float>(CurrentBaseColor));
+				auto &&YMM0 = _mm256_setzero_ps();
+				auto &&YMMCurrentBaseColor = _mm256_set1_ps(static_cast<float>(CurrentBaseColor));
 				for (auto x = WidthMod8; x < width; ++x)
 					dstp[y][x] = static_cast<float>((srcp[y][x] - CurrentBaseColor) * ReferenceSum / FieldSum + CurrentBaseColor);
 				for (auto x = 0; x < WidthMod8; x += 8) {
@@ -130,8 +130,8 @@ auto VS_CC fixfadesGetFrame(int n, int activationReason, void **instanceData, vo
 				}
 			};
 			auto FixFadesPrepare_AVX = [&]() {
-				auto &YMMTopField = _mm256_setzero_ps();
-				auto &YMMBottomField = _mm256_setzero_ps();
+				auto &&YMMTopField = _mm256_setzero_ps();
+				auto &&YMMBottomField = _mm256_setzero_ps();
 				auto CalculateLine = [&](auto y, auto &FieldSum, auto &YMMField) {
 					for (auto x = WidthMod8; x < width; ++x)
 						FieldSum += srcp[y][x];
@@ -156,8 +156,8 @@ auto VS_CC fixfadesGetFrame(int n, int activationReason, void **instanceData, vo
 			};
 			auto FixFadesMode0_AVX_FMA = [&]() {
 				auto MeanSum = (TopFieldSum + BottomFieldSum) / 2.;
-				auto &YMMBottomFieldReference = _mm256_set1_ps(static_cast<float>(MeanSum / BottomFieldSum));
-				auto &YMMTopFieldReference = _mm256_set1_ps(static_cast<float>(MeanSum / TopFieldSum));
+				auto &&YMMBottomFieldReference = _mm256_set1_ps(static_cast<float>(MeanSum / BottomFieldSum));
+				auto &&YMMTopFieldReference = _mm256_set1_ps(static_cast<float>(MeanSum / TopFieldSum));
 				for (auto y = 0; y < height; ++y)
 					if (y % 2 == false)
 						ProcessLine_AVX_FMA(y, TopFieldSum, MeanSum, YMMTopFieldReference);
@@ -166,8 +166,8 @@ auto VS_CC fixfadesGetFrame(int n, int activationReason, void **instanceData, vo
 			};
 			auto FixFadesMode1_AVX_FMA = [&]() {
 				auto MinSum = std::min(TopFieldSum, BottomFieldSum);
-				auto &YMMBottomFieldReference = _mm256_set1_ps(static_cast<float>(MinSum / BottomFieldSum));
-				auto &YMMTopFieldReference = _mm256_set1_ps(static_cast<float>(MinSum / TopFieldSum));
+				auto &&YMMBottomFieldReference = _mm256_set1_ps(static_cast<float>(MinSum / BottomFieldSum));
+				auto &&YMMTopFieldReference = _mm256_set1_ps(static_cast<float>(MinSum / TopFieldSum));
 				if (MinSum == TopFieldSum)
 					for (auto y = 1; y < height; y += 2) {
 						ProcessLine_AVX_FMA(y, BottomFieldSum, MinSum, YMMBottomFieldReference);
@@ -181,8 +181,8 @@ auto VS_CC fixfadesGetFrame(int n, int activationReason, void **instanceData, vo
 			};
 			auto FixFadesMode2_AVX_FMA = [&]() {
 				auto MaxSum = std::max(TopFieldSum, BottomFieldSum);
-				auto &YMMBottomFieldReference = _mm256_set1_ps(static_cast<float>(MaxSum / BottomFieldSum));
-				auto &YMMTopFieldReference = _mm256_set1_ps(static_cast<float>(MaxSum / TopFieldSum));
+				auto &&YMMBottomFieldReference = _mm256_set1_ps(static_cast<float>(MaxSum / BottomFieldSum));
+				auto &&YMMTopFieldReference = _mm256_set1_ps(static_cast<float>(MaxSum / TopFieldSum));
 				if (MaxSum == TopFieldSum)
 					for (auto y = 1; y < height; y += 2) {
 						ProcessLine_AVX_FMA(y, BottomFieldSum, MaxSum, YMMBottomFieldReference);

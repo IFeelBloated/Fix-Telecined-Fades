@@ -7,7 +7,7 @@ auto VS_CC fixfadesInit(VSMap *in, VSMap *out, void **instanceData, VSNode *node
 	vsapi->setVideoInfo(d->vi, 1, node);
 }
 
-const VSFrameRef * VS_CC fixfadesGetFrame(int n, int activationReason, void **instanceData, void **frameData, VSFrameContext *frameCtx, VSCore *core, const VSAPI *vsapi) {
+auto VS_CC fixfadesGetFrame(int n, int activationReason, void **instanceData, void **frameData, VSFrameContext *frameCtx, VSCore *core, const VSAPI *vsapi)->const VSFrameRef * {
 	auto d = reinterpret_cast<FixFadesData *>(*instanceData);
 	if (activationReason == arInitial)
 		vsapi->requestFrameFilter(n, d->node, frameCtx);

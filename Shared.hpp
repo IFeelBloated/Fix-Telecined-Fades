@@ -1,12 +1,17 @@
 #pragma once
 #include "VapourSynth.h"
 #include "VSHelper.h"
-#include "cpufeatures.hpp"
 #include <cmath>
 #include <cstring>
 #include <algorithm>
 #include <immintrin.h>
 #include <malloc.h>
+
+#if defined(_MSC_VER)
+#include "cpufeatures.hpp"
+#elif defined(__GNUC__) || defined(__GNUG__) || defined(__clang__)
+#include "cpufeatures_gnu.hpp"
+#endif
 
 struct FixFadesData final {
 	const VSAPI *vsapi = nullptr;

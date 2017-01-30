@@ -1,40 +1,13 @@
-#include "VapourSynth.h"
-#include "VSHelper.h"
-#include "cpufeatures.hpp"
-#include <cmath>
-#include <cstring>
-#include <algorithm>
-#include <immintrin.h>
-#include <malloc.h>
+#include "Shared.hpp"
 
-struct FixFadesData final {
-	const VSAPI *vsapi = nullptr;
-	VSNodeRef *node = nullptr;
-	const VSVideoInfo *vi = nullptr;
-	int64_t mode = 0;
-	double threshold = 0.;
-	double color[3] = { 0., 0., 0. };
-	bool optimization = false;
-	FixFadesData(const VSMap *in, const VSAPI *api) {
-		vsapi = api;
-		node = vsapi->propGetNode(in, "clip", 0, nullptr);
-		vi = vsapi->getVideoInfo(node);
-	}
-	FixFadesData(FixFadesData &&) = delete;
-	FixFadesData(const FixFadesData &) = delete;
-	auto &operator=(FixFadesData &&) = delete;
-	auto &operator=(const FixFadesData &) = delete;
-	~FixFadesData() {
-		vsapi->freeNode(node);
-	}
-};
+extern auto VS_CC fixfadesGetFrame_AVX_FMA(int, int, void **, void **, VSFrameContext *, VSCore *, const VSAPI *)->const VSFrameRef *;
 
 auto VS_CC fixfadesInit(VSMap *in, VSMap *out, void **instanceData, VSNode *node, VSCore *core, const VSAPI *vsapi) {
 	auto d = reinterpret_cast<FixFadesData *>(*instanceData);
 	vsapi->setVideoInfo(d->vi, 1, node);
 }
 
-auto VS_CC fixfadesGetFrame(int n, int activationReason, void **instanceData, void **frameData, VSFrameContext *frameCtx, VSCore *core, const VSAPI *vsapi)->const VSFrameRef * {
+const VSFrameRef * VS_CC fixfadesGetFrame(int n, int activationReason, void **instanceData, void **frameData, VSFrameContext *frameCtx, VSCore *core, const VSAPI *vsapi) {
 	auto d = reinterpret_cast<FixFadesData *>(*instanceData);
 	if (activationReason == arInitial)
 		vsapi->requestFrameFilter(n, d->node, frameCtx);
@@ -116,112 +89,24 @@ auto VS_CC fixfadesGetFrame(int n, int activationReason, void **instanceData, vo
 			auto CopyToDestinationFrame = [&]() {
 				std::memcpy(dstp[0], srcp[0], width * height * sizeof(float));
 			};
-			auto CopyLine = [&](auto y) {
-				std::memcpy(dstp[y], srcp[y], width * sizeof(float));
-			};
-			auto ProcessLine_AVX_FMA = [&](auto y, auto FieldSum, auto ReferenceSum) {
-				auto &&YMMCurrentBaseColor = _mm256_set1_ps(static_cast<float>(CurrentBaseColor));
-				auto &&YMMFieldReference = _mm256_set1_ps(static_cast<float>(ReferenceSum / FieldSum));
-				for (auto x = WidthMod8; x < width; ++x)
-					dstp[y][x] = static_cast<float>((srcp[y][x] - CurrentBaseColor) * ReferenceSum / FieldSum + CurrentBaseColor);
-				for (auto x = 0; x < WidthMod8; x += 8) {
-					auto &&YMM0 = _mm256_sub_ps(reinterpret_cast<const __m256 &>(srcp[y][x]), YMMCurrentBaseColor);
-					_mm256_store_ps(&dstp[y][x], _mm256_fmadd_ps(YMM0, YMMFieldReference, YMMCurrentBaseColor));
-				}
-			};
-			auto FixFadesPrepare_AVX = [&]() {
-				auto &&YMMTopField = _mm256_setzero_ps();
-				auto &&YMMBottomField = _mm256_setzero_ps();
-				auto CalculateLine = [&](auto y, auto &FieldSum, auto &YMMField) {
-					for (auto x = WidthMod8; x < width; ++x)
-						FieldSum += srcp[y][x];
-					for (auto x = 0; x < WidthMod8; x += 8)
-						YMMField = _mm256_add_ps(reinterpret_cast<const __m256 &>(srcp[y][x]), YMMField);
-				};
-				auto YMMToFieldSum = [&]() {
-					auto Offset = CurrentBaseColor * FieldPixelCount;
-					for (auto i = 0; i < 8; ++i) {
-						TopFieldSum += reinterpret_cast<float *>(&YMMTopField)[i];
-						BottomFieldSum += reinterpret_cast<float *>(&YMMBottomField)[i];
-					}
-					TopFieldSum -= Offset;
-					BottomFieldSum -= Offset;
-				};
-				for (auto y = 0; y < height; ++y)
-					if (y % 2 == false)
-						CalculateLine(y, TopFieldSum, YMMTopField);
-					else
-						CalculateLine(y, BottomFieldSum, YMMBottomField);
-				YMMToFieldSum();
-			};
-			auto FixFadesMode0_AVX_FMA = [&]() {
-				auto MeanSum = (TopFieldSum + BottomFieldSum) / 2.;
-				for (auto y = 0; y < height; ++y)
-					if (y % 2 == false)
-						ProcessLine_AVX_FMA(y, TopFieldSum, MeanSum);
-					else
-						ProcessLine_AVX_FMA(y, BottomFieldSum, MeanSum);
-			};
-			auto FixFadesMode1_AVX_FMA = [&]() {
-				auto MinSum = std::min(TopFieldSum, BottomFieldSum);
-				if (MinSum == TopFieldSum)
-					for (auto y = 1; y < height; y += 2) {
-						ProcessLine_AVX_FMA(y, BottomFieldSum, MinSum);
-						CopyLine(y - 1);
-					}
-				else
-					for (auto y = 0; y < height; y += 2) {
-						ProcessLine_AVX_FMA(y, TopFieldSum, MinSum);
-						CopyLine(y + 1);
-					}
-			};
-			auto FixFadesMode2_AVX_FMA = [&]() {
-				auto MaxSum = std::max(TopFieldSum, BottomFieldSum);
-				if (MaxSum == TopFieldSum)
-					for (auto y = 1; y < height; y += 2) {
-						ProcessLine_AVX_FMA(y, BottomFieldSum, MaxSum);
-						CopyLine(y - 1);
-					}
-				else
-					for (auto y = 0; y < height; y += 2) {
-						ProcessLine_AVX_FMA(y, TopFieldSum, MaxSum);
-						CopyLine(y + 1);
-					}
-			};
-			auto DoIt = [&]() {
-				auto CPU = CPUFeatures();
-				if (d->optimization && CPU.avx)
-					FixFadesPrepare_AVX();
-				else
-					FixFadesPrepare();
-				if (GetNormalizedDifference() < d->threshold)
-					CopyToDestinationFrame();
-				else
-					switch (d->mode) {
-					case 0:
-						if (d->optimization && CPU.avx && CPU.fma3)
-							FixFadesMode0_AVX_FMA();
-						else
-							FixFadesMode0();
-						break;
-					case 1:
-						if (d->optimization && CPU.avx && CPU.fma3)
-							FixFadesMode1_AVX_FMA();
-						else
-							FixFadesMode1();
-						break;
-					case 2:
-						if (d->optimization && CPU.avx && CPU.fma3)
-							FixFadesMode2_AVX_FMA();
-						else
-							FixFadesMode2();
-						break;
-					default:
-						break;
-					}
-			};
 			Initialize();
-			DoIt();
+			FixFadesPrepare();
+			if (GetNormalizedDifference() < d->threshold)
+				CopyToDestinationFrame();
+			else
+				switch (d->mode) {
+				case 0:
+					FixFadesMode0();
+					break;
+				case 1:
+					FixFadesMode1();
+					break;
+				case 2:
+					FixFadesMode2();
+					break;
+				default:
+					break;
+				}
 		}
 		vsapi->freeFrame(src);
 		return dst;
@@ -237,6 +122,8 @@ auto VS_CC fixfadesFree(void *instanceData, VSCore *core, const VSAPI *vsapi) {
 auto VS_CC fixfadesCreate(const VSMap *in, VSMap *out, void *userData, VSCore *core, const VSAPI *vsapi) {
 	auto d = new FixFadesData{ in, vsapi };
 	auto err = 0;
+	auto CPU = CPUFeatures();
+	auto Optimization = false;
 	auto InputColorChannelCount = vsapi->propNumElements(in, "color");
 	if (!isConstantFormat(d->vi) || d->vi->format->sampleType != stFloat || d->vi->format->bitsPerSample < 32) {
 		vsapi->setError(out, "FixFades: input clip must be single precision fp, with constant dimensions.");
@@ -268,10 +155,13 @@ auto VS_CC fixfadesCreate(const VSMap *in, VSMap *out, void *userData, VSCore *c
 		for (auto i = 0; i < d->vi->format->numPlanes; ++i)
 			d->color[i] = vsapi->propGetFloat(in, "color", i, nullptr);
 	}
-	d->optimization = !!vsapi->propGetInt(in, "opt", 0, &err);
+	Optimization = !!vsapi->propGetInt(in, "opt", 0, &err);
 	if (err)
-		d->optimization = true;
-	vsapi->createFilter(in, out, "FixFades", fixfadesInit, fixfadesGetFrame, fixfadesFree, fmParallel, 0, d, core);
+		Optimization = true;
+	if (Optimization && CPU.avx && CPU.fma3)
+		vsapi->createFilter(in, out, "FixFades", fixfadesInit, fixfadesGetFrame_AVX_FMA, fixfadesFree, fmParallel, 0, d, core);
+	else
+		vsapi->createFilter(in, out, "FixFades", fixfadesInit, fixfadesGetFrame, fixfadesFree, fmParallel, 0, d, core);
 }
 
 VS_EXTERNAL_API(auto) VapourSynthPluginInit(VSConfigPlugin configFunc, VSRegisterFunction registerFunc, VSPlugin *plugin) {

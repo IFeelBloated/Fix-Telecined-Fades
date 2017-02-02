@@ -23,7 +23,6 @@ auto VS_CC fixfadesGetFrame(int n, int activationReason, void **instanceData, vo
 			auto srcp = reinterpret_cast<const float **>(alloca(height * sizeof(void *)));
 			auto dstp = reinterpret_cast<float **>(alloca(height * sizeof(void *)));
 			auto TopFieldSum = 0., BottomFieldSum = 0., CurrentBaseColor = d->color[plane];
-			auto FieldPixelCount = static_cast<int64_t>(width) * height / 2;
 			auto Initialize = [&]() {
 				auto src_stride = vsapi->getStride(src, plane) / sizeof(float);
 				auto dst_stride = vsapi->getStride(dst, plane) / sizeof(float);
@@ -82,6 +81,7 @@ auto VS_CC fixfadesGetFrame(int n, int activationReason, void **instanceData, vo
 						}
 			};
 			auto GetNormalizedDifference = [&]() {
+				auto FieldPixelCount = static_cast<int64_t>(width) * height / 2;
 				return std::abs(TopFieldSum - BottomFieldSum) / FieldPixelCount;
 			};
 			auto CopyToDestinationFrame = [&]() {

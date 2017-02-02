@@ -23,8 +23,6 @@ auto VS_CC fixfadesGetFrame(int n, int activationReason, void **instanceData, vo
 			auto srcp = reinterpret_cast<const float **>(alloca(height * sizeof(void *)));
 			auto dstp = reinterpret_cast<float **>(alloca(height * sizeof(void *)));
 			auto TopFieldSum = 0., BottomFieldSum = 0., CurrentBaseColor = d->color[plane];
-			constexpr auto BitMask = (0xFFFFFFFFFFFFFFFFull >> 3) << 3;
-			auto WidthMod8 = width & BitMask;
 			auto FieldPixelCount = static_cast<int64_t>(width) * height / 2;
 			auto Initialize = [&]() {
 				auto src_stride = vsapi->getStride(src, plane) / sizeof(float);

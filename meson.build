@@ -2,7 +2,7 @@ project('Fix Telecined Fades',
         'cpp',
         default_options : ['cpp_std=c++14'],
         license : 'GPL-3.0',
-        version : '8')
+        version : '5')
 
 # Deps
 soup = dependency('vapoursynth', version : '>= 0')

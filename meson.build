@@ -2,10 +2,13 @@ project('Fix Telecined Fades',
         'cpp',
         default_options : ['cpp_std=c++14'],
         license : 'GPL-3.0',
-        version : '5')
+        version : '6')
+
 
 # Deps
-soup = dependency('vapoursynth', version : '>= 0')
+vapoursynth = dependency('vapoursynth', version : '>= 0')
+yasm = find_program('yasm')
+
 
 # Sources
 sources = [
@@ -16,6 +19,7 @@ sources_avxfma = [
 
 sources_asm = [
     'cpu.asm']
+
 
 # Assembler
 yasm_opts = ['-Dprivate_prefix=ftf']
@@ -38,18 +42,19 @@ if host_machine.system() == 'windows'
 endif
 yasm_opts += ['@INPUT@', '-o', '@OUTPUT@']
 
-yasm = find_program('yasm')
 asm_gen = generator(yasm,
                     output : '@BASENAME@.obj',
                     arguments : yasm_opts)
+
 objs_asm = asm_gen.process(sources_asm)
+
 
 # Libs
 avxfma = static_library(
     'avxfma',
     [sources_avxfma, objs_asm],
     cpp_args : ['-mavx', '-mfma'],
-    dependencies : soup,
+    dependencies : vapoursynth,
     pic : true,
     install : false)
 
@@ -57,6 +62,6 @@ library(
     'fixtelecinedfades',
     [sources, objs_asm],
     link_with : avxfma,
-    dependencies : soup,
-    install_dir : join_paths(get_option('libdir'), 'vapoursynth'),
+    dependencies : vapoursynth,
+    install_dir : join_paths(get_option('prefix'), get_option('libdir'), 'vapoursynth'),
     install : true)

@@ -118,48 +118,15 @@ auto VS_CC fixfadesFree(void *instanceData, VSCore *core, const VSAPI *vsapi) {
 }
 
 auto VS_CC fixfadesCreate(const VSMap *in, VSMap *out, void *userData, VSCore *core, const VSAPI *vsapi) {
-	auto d = new FixFadesData{ in, vsapi };
-	auto err = 0;
-	auto CPU = CPUFeatures();
-	auto Optimization = false;
-	auto InputColorChannelCount = vsapi->propNumElements(in, "color");
-	if (!isConstantFormat(d->vi) || d->vi->format->sampleType != stFloat || d->vi->format->bitsPerSample < 32) {
-		vsapi->setError(out, "FixFades: input clip must be single precision fp, with constant dimensions.");
-		delete d;
-		return;
-	}
-	d->mode = vsapi->propGetInt(in, "mode", 0, &err);
-	if (err)
-		d->mode = 0;
-	if (d->mode < 0 || d->mode > 2) {
-		vsapi->setError(out, "FixFades: mode must be 0, 1, or 2!");
-		delete d;
-		return;
-	}
-	d->threshold = vsapi->propGetFloat(in, "threshold", 0, &err);
-	if (err)
-		d->threshold = 0.002;
-	if (d->threshold < 0.) {
-		vsapi->setError(out, "FixFades: threshold must not be negative!");
-		delete d;
-		return;
-	}
-	if (InputColorChannelCount != -1) {
-		if (d->vi->format->numPlanes != InputColorChannelCount) {
-			vsapi->setError(out, "FixFades: Invalid color value for the input colorspace!");
-			delete d;
-			return;
-		}
-		for (auto i = 0; i < d->vi->format->numPlanes; ++i)
-			d->color[i] = vsapi->propGetFloat(in, "color", i, nullptr);
-	}
-	Optimization = !!vsapi->propGetInt(in, "opt", 0, &err);
-	if (err)
-		Optimization = true;
-	if (Optimization && CPU.avx && CPU.fma3)
-		vsapi->createFilter(in, out, "FixFades", fixfadesInit, fixfadesGetFrame_AVX_FMA, fixfadesFree, fmParallel, 0, d, core);
+	auto d = new FixFadesData{ in, out, vsapi };
+	auto CPU = CPUFeatures{};
+	if (!d->illformed)
+		if (d->optimization && CPU.avx && CPU.fma3)
+			vsapi->createFilter(in, out, "FixFades", fixfadesInit, fixfadesGetFrame_AVX_FMA, fixfadesFree, fmParallel, 0, d, core);
+		else
+			vsapi->createFilter(in, out, "FixFades", fixfadesInit, fixfadesGetFrame, fixfadesFree, fmParallel, 0, d, core);
 	else
-		vsapi->createFilter(in, out, "FixFades", fixfadesInit, fixfadesGetFrame, fixfadesFree, fmParallel, 0, d, core);
+		delete d;
 }
 
 VS_EXTERNAL_API(auto) VapourSynthPluginInit(VSConfigPlugin configFunc, VSRegisterFunction registerFunc, VSPlugin *plugin) {
